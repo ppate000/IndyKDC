@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jungle Quest Leaderboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app" class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">🌿</span>
+        <div>
+          <h1>Jungle Quest</h1>
+          <p>Adventure Leaderboard</p>
+        </div>
+      </div>
+
+      <div class="rotation-wrap">
+        <span class="eyebrow">Current Rotation</span>
+        <button id="rotationDisplay" class="rotation-pill" type="button">Half 1</button>
+      </div>
+
+      <div class="header-actions">
+        <button id="soundToggle" class="icon-btn" title="Toggle sound" type="button">🔊</button>
+        <button id="fullscreenBtn" class="icon-btn" title="Full screen" type="button">⛶</button>
+        <button id="adminUnlockBtn" class="admin-btn" type="button">🔒 Admin</button>
+      </div>
+    </header>
+
+    <section class="hero-panel">
+      <div class="timer-block">
+        <span class="eyebrow">Expedition Time</span>
+        <div id="timerDisplay" class="timer">20:00</div>
+        <div id="timerHidden" class="timer-hidden hidden">TIME HIDDEN</div>
+        <div id="timerStatus" class="timer-status">Ready</div>
+      </div>
+      <div class="leader-callout">
+        <span class="eyebrow">Current Leader</span>
+        <div id="leaderName" class="leader-name">Waiting for points</div>
+        <div id="leaderScore" class="leader-score">—</div>
+      </div>
+    </section>
+
+    <main>
+      <div id="rankingsHiddenBanner" class="rankings-hidden-banner hidden">
+        <div class="vines">🌿 🌿 🌿</div>
+        <h2>Rankings Hidden</h2>
+        <p>The jungle is keeping its secrets.</p>
+      </div>
+      <section id="leaderboard" class="leaderboard" aria-live="polite"></section>
+    </main>
+
+    <footer class="footer">
+      <span>Jungle Quest Control System</span>
+      <span><span id="connectionStatus" class="connection-status">Connecting…</span> • <span id="saveStatus">Loading shared state…</span></span>
+    </footer>
+  </div>
+
+  <div id="toastContainer" class="toast-container"></div>
+  <div id="confettiLayer" class="confetti-layer"></div>
+
+  <dialog id="loginDialog" class="modal login-modal">
+    <form id="loginForm" method="dialog">
+      <button id="loginCloseBtn" class="close-btn" type="button">×</button>
+      <div class="modal-icon">🗝️</div>
+      <h2>Admin Access</h2>
+      <p>Sign in with your Supabase admin account.</p>
+      <label>
+        Email
+        <input id="emailInput" type="email" autocomplete="username" required />
+      </label>
+      <label>
+        Password
+        <input id="passwordInput" type="password" autocomplete="current-password" required />
+      </label>
+      <p id="loginError" class="error-text hidden">Could not sign in.</p>
+      <button class="primary-btn" value="default" type="submit">Unlock Controls</button>
+      <p class="hint">Create the admin user in Supabase Authentication.</p>
+    </form>
+  </dialog>
+
+  <aside id="adminPanel" class="admin-panel" aria-hidden="true">
+    <div class="admin-panel-header">
+      <div>
+        <span class="eyebrow">Secure Controls</span>
+        <h2>Admin Panel</h2>
+      </div>
+      <button id="closeAdminBtn" class="close-panel-btn" type="button">×</button>
+    </div>
+
+    <div class="admin-scroll">
+      <section class="control-section">
+        <h3>Timer</h3>
+        <div class="timer-controls-grid">
+          <button data-timer="start" class="control-btn">▶ Start</button>
+          <button data-timer="pause" class="control-btn">⏸ Pause</button>
+          <button data-timer="resume" class="control-btn">↻ Resume</button>
+          <button data-timer="reset" class="control-btn danger-soft">↺ Reset</button>
+          <button data-timer="add60" class="control-btn">+1 min</button>
+          <button data-timer="sub60" class="control-btn">−1 min</button>
+        </div>
+        <div class="inline-fields">
+          <label>Minutes<input id="timerMinutesInput" type="number" min="0" max="999" value="20" /></label>
+          <label>Seconds<input id="timerSecondsInput" type="number" min="0" max="59" value="0" /></label>
+          <button id="setTimerBtn" class="secondary-btn" type="button">Set</button>
+        </div>
+        <label class="toggle-row"><input id="hideTimerToggle" type="checkbox" /><span>Hide time remaining</span></label>
+      </section>
+
+      <section class="control-section">
+        <h3>Reveal & Rankings</h3>
+        <div class="stacked-actions">
+          <button id="toggleRankingsBtn" class="secondary-btn" type="button">Hide Rankings</button>
+          <button id="coverAllBtn" class="secondary-btn" type="button">Close All Curtains</button>
+          <button id="revealNextBtn" class="primary-btn" type="button">Reveal Next Team</button>
+          <button id="revealAllBtn" class="secondary-btn" type="button">Reveal All</button>
+        </div>
+      </section>
+
+      <section class="control-section">
+        <h3>Rotation</h3>
+        <div class="segmented">
+          <button data-rotation="Half 1" class="segment active" type="button">Half 1</button>
+          <button data-rotation="Half 2" class="segment" type="button">Half 2</button>
+        </div>
+      </section>
+
+      <section class="control-section">
+        <div class="section-heading-row">
+          <h3>Point Management</h3>
+          <button id="undoBtn" class="undo-btn" type="button">↶ Undo</button>
+        </div>
+        <div id="teamControls" class="team-controls"></div>
+      </section>
+
+      <section class="control-section">
+        <div class="section-heading-row">
+          <h3>History</h3>
+          <button id="clearLogBtn" class="text-btn danger-text" type="button">Clear</button>
+        </div>
+        <div id="activityAlert" class="activity-alert hidden"></div>
+        <div id="historyList" class="history-list"></div>
+      </section>
+
+      <section class="control-section">
+        <h3>Team Setup</h3>
+        <div id="teamSettings" class="team-settings"></div>
+      </section>
+
+      <section class="control-section">
+        <h3>Security</h3>
+        <p class="admin-identity">Signed in as <strong id="adminIdentity">Not signed in</strong></p>
+        <label>New admin password<input id="newPasswordInput" type="password" minlength="8" /></label>
+        <button id="changePasswordBtn" class="secondary-btn" type="button">Change Password</button>
+        <button id="resetAllBtn" class="danger-btn" type="button">Reset Entire Leaderboard</button>
+        <button id="lockAdminBtn" class="text-btn" type="button">Lock Admin Panel</button>
+      </section>
+    </div>
+  </aside>
+
+  <template id="teamCardTemplate">
+    <article class="team-card">
+      <div class="particle-layer"></div>
+      <div class="rank-badge"></div>
+      <div class="team-icon"></div>
+      <div class="team-info">
+        <h2 class="team-name"></h2>
+        <div class="score-line"><span class="score"></span><span class="pts-label">PTS</span></div>
+      </div>
+      <div class="mascot-reaction"></div>
+      <div class="point-float"></div>
+      <div class="curtain">
+        <div class="curtain-left"></div>
+        <div class="curtain-right"></div>
+        <div class="curtain-emblem">🌿</div>
+      </div>
+    </article>
+  </template>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
