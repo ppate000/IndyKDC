@@ -93,9 +93,9 @@ button { cursor: pointer; }
 .pts-label { font-size: 11px; font-weight: 800; letter-spacing: 2px; opacity: .8; }
 .mascot-reaction { position:absolute; left:50%; top:50%; width:118px; height:118px; object-fit:contain; opacity:0; pointer-events:none; transform:translate(-50%,-50%) scale(.72); transform-origin:center; filter:drop-shadow(0 7px 9px rgba(0,0,0,.4)); image-rendering:pixelated; z-index:4; }
 .team-card.earned .team-icon-base { animation: baseMascotDip .8s ease; }
-.team-card.earned .mascot-reaction { animation: mascotPop .85s cubic-bezier(.2,.8,.2,1); }
+.team-card.earned .mascot-reaction { animation: mascotPop 2.2s cubic-bezier(.2,.8,.2,1); }
 @keyframes baseMascotDip { 0%,100%{opacity:1;transform:scale(1)} 28%,72%{opacity:.12;transform:scale(.9)} }
-@keyframes mascotPop { 0%{opacity:0;transform:translate(-50%,-50%) scale(.72)} 18%{opacity:1;transform:translate(-50%,-50%) scale(1)} 58%{opacity:1;transform:translate(-50%,-50%) scale(1.34)} 100%{opacity:0;transform:translate(-50%,-50%) scale(1.5)} }
+@keyframes mascotPop { 0%{opacity:0;transform:translate(-50%,-50%) scale(.72)} 10%{opacity:1;transform:translate(-50%,-50%) scale(1)} 68%{opacity:1;transform:translate(-50%,-50%) scale(1.34)} 88%{opacity:1;transform:translate(-50%,-50%) scale(1.42)} 100%{opacity:0;transform:translate(-50%,-50%) scale(1.5)} }
 .point-float { position: absolute; right: 38px; top: 42%; font-family: "Baloo 2"; font-size: 44px; font-weight: 800; color: white; opacity: 0; text-shadow: 0 5px 10px rgba(0,0,0,.36); pointer-events: none; }
 .point-float.animate { animation: floatPoints 1.2s ease-out; }
 @keyframes floatPoints { 0%{opacity:0;transform:translateY(20px) scale(.6)} 20%{opacity:1;transform:translateY(0) scale(1.2)} 100%{opacity:0;transform:translateY(-65px) scale(1)} }
