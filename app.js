@@ -316,23 +316,9 @@
     float.classList.add('animate');
     card.classList.add('earned');
     setTimeout(() => card.classList.remove('earned'), 850);
-    spawnLeaves(card);
   }
 
-  function spawnLeaves(card) {
-    const layer = card.querySelector('.particle-layer');
-    for (let i = 0; i < 12; i++) {
-      const leaf = document.createElement('span');
-      leaf.className = 'leaf-particle';
-      leaf.textContent = ['🍃','🌿','🍂'][Math.floor(Math.random()*3)];
-      leaf.style.left = `${30 + Math.random()*55}%`;
-      leaf.style.setProperty('--x', `${-110 + Math.random()*220}px`);
-      leaf.style.setProperty('--y', `${-80 - Math.random()*100}px`);
-      leaf.style.setProperty('--r', `${-220 + Math.random()*440}deg`);
-      layer.appendChild(leaf);
-      setTimeout(() => leaf.remove(), 1600);
-    }
-  }
+
 
   function requireAdmin() {
     if (adminUnlocked && currentUser) return true;
