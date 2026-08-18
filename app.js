@@ -333,7 +333,7 @@
     void float.offsetWidth;
     float.classList.add('animate');
     card.classList.add('earned');
-    setTimeout(() => card.classList.remove('earned'), 850);
+    setTimeout(() => card.classList.remove('earned'), 2200);
     // Intentionally no leaf/particle burst. Keep score float + mascot pop only.
   }
 
