@@ -58,7 +58,7 @@ values (
       {"id":2,"name":"Jaguars","color":"#4b368f","icon":"🐆","score":0,"covered":false},
       {"id":3,"name":"Parrots","color":"#137f6c","icon":"🦜","score":0,"covered":false},
       {"id":4,"name":"Gorillas","color":"#38628a","icon":"🦍","score":0,"covered":false},
-      {"id":5,"name":"Crocodiles","color":"#547f2b","icon":"🐊","score":0,"covered":false},
+      {"id":5,"name":"Lizard","color":"#547f2b","icon":"🦎","score":0,"covered":false},
       {"id":6,"name":"Elephants","color":"#9b5d2e","icon":"🐘","score":0,"covered":false}
     ],
     "timer":{"duration":1200,"remaining":1200,"running":false,"hidden":false,"endAt":null},
