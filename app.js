@@ -7,7 +7,7 @@
       { id: 2, name: 'Jaguars', color: '#4b368f', icon: '🐆', score: 0, covered: false },
       { id: 3, name: 'Parrots', color: '#137f6c', icon: '🦜', score: 0, covered: false },
       { id: 4, name: 'Gorillas', color: '#38628a', icon: '🦍', score: 0, covered: false },
-      { id: 5, name: 'Crocodiles', color: '#547f2b', icon: '🐊', score: 0, covered: false },
+      { id: 5, name: 'Lizard', color: '#547f2b', icon: '🦎', score: 0, covered: false },
       { id: 6, name: 'Elephants', color: '#9b5d2e', icon: '🐘', score: 0, covered: false }
     ],
     timer: { duration: 1200, remaining: 1200, running: false, hidden: false, endAt: null },
@@ -16,6 +16,15 @@
     history: [],
     soundEnabled: true,
     lastLeaderId: null
+  };
+
+  const CELEBRATION_ASSETS = {
+    1: 'assets/celebrations/tiger.gif',
+    2: 'assets/celebrations/jaguar.webp',
+    3: 'assets/celebrations/parrot.gif',
+    4: 'assets/celebrations/gorilla.gif',
+    5: 'assets/celebrations/lizard.webp',
+    6: 'assets/celebrations/elephant.gif'
   };
 
   const CONFIG = window.JUNGLE_CONFIG || {};
@@ -65,6 +74,12 @@
       timer: { ...DEFAULT_STATE.timer, ...(incoming.timer || {}) },
       history: Array.isArray(incoming.history) ? incoming.history : []
     };
+    // Migrate the original Crocodiles team to Lizard without overwriting later custom names.
+    const lizardTeam = merged.teams.find(team => Number(team.id) === 5);
+    if (lizardTeam && (lizardTeam.name === 'Crocodiles' || lizardTeam.name === 'Crocodile')) {
+      lizardTeam.name = 'Lizard';
+      lizardTeam.icon = '🦎';
+    }
     delete merged.password;
     return merged;
   }
@@ -276,7 +291,10 @@
       node.querySelector('.team-icon-base').textContent = team.icon;
       node.querySelector('.team-name').textContent = team.name;
       node.querySelector('.score').textContent = team.score;
-      node.querySelector('.mascot-reaction').textContent = team.icon;
+      const reaction = node.querySelector('.mascot-reaction');
+      reaction.src = CELEBRATION_ASSETS[team.id] || '';
+      reaction.alt = '';
+      reaction.hidden = !reaction.src;
       els.leaderboard.appendChild(node);
     });
 
