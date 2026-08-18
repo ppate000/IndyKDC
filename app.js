@@ -43,7 +43,7 @@
     app: document.getElementById('app'), leaderboard: document.getElementById('leaderboard'),
     timerDisplay: document.getElementById('timerDisplay'), timerHidden: document.getElementById('timerHidden'),
     timerStatus: document.getElementById('timerStatus'), leaderName: document.getElementById('leaderName'),
-    leaderScore: document.getElementById('leaderScore'), rotationDisplay: document.getElementById('rotationDisplay'),
+    leaderScore: document.getElementById('leaderScore'), leaderCallout: document.querySelector('.leader-callout'), rotationDisplay: document.getElementById('rotationDisplay'),
     rankingsHiddenBanner: document.getElementById('rankingsHiddenBanner'), adminPanel: document.getElementById('adminPanel'),
     loginDialog: document.getElementById('loginDialog'), emailInput: document.getElementById('emailInput'),
     passwordInput: document.getElementById('passwordInput'), loginError: document.getElementById('loginError'),
@@ -233,18 +233,26 @@
 
   function renderHeader() {
     els.rotationDisplay.textContent = state.rotation;
-    const sorted = sortedTeams();
-    const leader = sorted[0];
-    const tied = sorted.length > 1 && leader.score === sorted[1].score;
-    if (!leader || leader.score === 0) {
-      els.leaderName.textContent = 'Waiting for points';
+    const leaderHidden = state.rankingsHidden || state.teams.some(team => team.covered);
+    if (els.leaderCallout) els.leaderCallout.classList.toggle('leader-concealed', leaderHidden);
+
+    if (leaderHidden) {
+      els.leaderName.textContent = 'Leader Hidden';
       els.leaderScore.textContent = '—';
-    } else if (tied) {
-      els.leaderName.textContent = 'It’s a tie!';
-      els.leaderScore.textContent = `${leader.score} points`;
     } else {
-      els.leaderName.textContent = `${leader.icon} ${leader.name}`;
-      els.leaderScore.textContent = `${leader.score} points`;
+      const sorted = sortedTeams();
+      const leader = sorted[0];
+      const tied = sorted.length > 1 && leader.score === sorted[1].score;
+      if (!leader || leader.score === 0) {
+        els.leaderName.textContent = 'Waiting for points';
+        els.leaderScore.textContent = '—';
+      } else if (tied) {
+        els.leaderName.textContent = 'It’s a tie!';
+        els.leaderScore.textContent = `${leader.score} points`;
+      } else {
+        els.leaderName.textContent = `${leader.icon} ${leader.name}`;
+        els.leaderScore.textContent = `${leader.score} points`;
+      }
     }
     els.soundToggle.textContent = state.soundEnabled ? '🔊' : '🔇';
   }
@@ -265,7 +273,7 @@
       node.classList.toggle('first-place', index === 0 && team.score > 0);
       node.classList.toggle('covered', team.covered);
       node.querySelector('.rank-badge').textContent = rankLabel(index);
-      node.querySelector('.team-icon').textContent = team.icon;
+      node.querySelector('.team-icon-base').textContent = team.icon;
       node.querySelector('.team-name').textContent = team.name;
       node.querySelector('.score').textContent = team.score;
       node.querySelector('.mascot-reaction').textContent = team.icon;
@@ -519,6 +527,15 @@
   }
   function revealAll() { if (!requireAdmin()) return; state.teams.forEach(t=>t.covered=false); playTone('trumpet'); renderAll(); }
 
+  function revealTeam(teamId) {
+    if (!requireAdmin()) return;
+    const team = state.teams.find(t => t.id === teamId);
+    if (!team || !team.covered) return;
+    team.covered = false;
+    playTone('drums');
+    renderAll();
+  }
+
   function bindEvents() {
     document.getElementById('loginCloseBtn').addEventListener('click',()=> els.loginDialog.close());
 
@@ -591,6 +608,11 @@
     document.getElementById('undoBtn').addEventListener('click',undoLast);
 
     document.addEventListener('click',e=>{
+      const coveredCard = e.target.closest('.team-card.covered');
+      if (coveredCard) {
+        revealTeam(Number(coveredCard.dataset.id));
+        return;
+      }
       const p=e.target.closest('[data-points]'); if(p) addPoints(Number(p.dataset.team),Number(p.dataset.points));
       const add=e.target.closest('[data-custom-add]'); if(add){const id=Number(add.dataset.customAdd);const input=document.querySelector(`[data-custom-input="${id}"]`);addPoints(id,Math.abs(Number(input.value)||0));input.value='';}
       const sub=e.target.closest('[data-custom-sub]'); if(sub){const id=Number(sub.dataset.customSub);const input=document.querySelector(`[data-custom-input="${id}"]`);addPoints(id,-Math.abs(Number(input.value)||0));input.value='';}
