@@ -100,6 +100,9 @@
     localStorage.setItem('jungleLeaderboardState', JSON.stringify(state));
   }
 
+  let pendingSaveSnapshot = null;
+  let saveLoopRunning = false;
+
   async function saveState() {
     cacheState();
     if (suppressCloudSave) return;
@@ -112,24 +115,52 @@
       return;
     }
 
+    // Always keep only the newest state. This prevents rapid point clicks from
+    // racing each other and writing an older score after a newer one.
+    pendingSaveSnapshot = clone(state);
+    delete pendingSaveSnapshot.password;
     els.saveStatus.textContent = 'Saving…';
-    saveInFlight = true;
-    const payload = clone(state);
-    delete payload.password;
-    const updatedAt = new Date().toISOString();
-    const { error } = await db
-      .from('app_state')
-      .update({ state: payload, updated_by: currentUser.id, updated_at: updatedAt })
-      .eq('id', 1);
+    if (saveLoopRunning) return;
 
-    saveInFlight = false;
-    if (error) {
-      console.error(error);
-      els.saveStatus.textContent = 'Save failed';
-      toast(`Could not save: ${error.message}`, 'warning');
-    } else {
-      lastCloudUpdatedAt = updatedAt;
-      els.saveStatus.textContent = 'Live • saved';
+    saveLoopRunning = true;
+    saveInFlight = true;
+    try {
+      while (pendingSaveSnapshot) {
+        const payload = pendingSaveSnapshot;
+        pendingSaveSnapshot = null;
+        const updatedAt = new Date().toISOString();
+
+        // .select() is intentional: a normal UPDATE can look successful even
+        // when RLS causes zero rows to be changed. We verify row 1 came back.
+        const { data, error } = await db
+          .from('app_state')
+          .update({ state: payload, updated_by: currentUser.id, updated_at: updatedAt })
+          .eq('id', 1)
+          .select('id, state, updated_at, updated_by')
+          .maybeSingle();
+
+        if (error) {
+          console.error('Supabase save failed:', error);
+          els.saveStatus.textContent = 'Save failed';
+          toast(`Could not save to Supabase: ${error.message}`, 'warning');
+          pendingSaveSnapshot = null;
+          return;
+        }
+
+        if (!data || Number(data.id) !== 1) {
+          console.error('Supabase update changed zero rows. Check the app_state RLS update policy and leaderboard_admins allowlist.');
+          els.saveStatus.textContent = 'Not saved • admin permission';
+          toast('Supabase did not accept the update. Run the supplied policy-fix SQL and verify this email is in leaderboard_admins.', 'warning');
+          pendingSaveSnapshot = null;
+          return;
+        }
+
+        lastCloudUpdatedAt = data.updated_at || updatedAt;
+        els.saveStatus.textContent = 'Live • saved';
+      }
+    } finally {
+      saveInFlight = false;
+      saveLoopRunning = false;
     }
   }
 
@@ -177,7 +208,12 @@
         event: 'UPDATE', schema: 'public', table: 'app_state', filter: 'id=eq.1'
       }, payload => {
         if (!payload.new?.state) return;
-        lastCloudUpdatedAt = payload.new.updated_at || lastCloudUpdatedAt;
+        const incomingUpdatedAt = payload.new.updated_at || null;
+        if (saveInFlight && currentUser && payload.new.updated_by === currentUser.id) {
+          lastCloudUpdatedAt = incomingUpdatedAt || lastCloudUpdatedAt;
+          return;
+        }
+        lastCloudUpdatedAt = incomingUpdatedAt || lastCloudUpdatedAt;
         applyRemoteState(payload.new.state, true);
       })
       .subscribe(status => {
