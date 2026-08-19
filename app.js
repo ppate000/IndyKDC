@@ -44,8 +44,12 @@
   let adminUnlocked = false;
   let currentUser = null;
   let realtimeChannel = null;
+  let realtimeReconnectHandle = null;
+  let cloudPollHandle = null;
   let cloudReady = false;
   let suppressCloudSave = false;
+  let saveInFlight = false;
+  let lastCloudUpdatedAt = null;
   const cardPositions = new Map();
 
   const els = {
@@ -109,18 +113,22 @@
     }
 
     els.saveStatus.textContent = 'Saving…';
+    saveInFlight = true;
     const payload = clone(state);
     delete payload.password;
+    const updatedAt = new Date().toISOString();
     const { error } = await db
       .from('app_state')
-      .update({ state: payload, updated_by: currentUser.id, updated_at: new Date().toISOString() })
+      .update({ state: payload, updated_by: currentUser.id, updated_at: updatedAt })
       .eq('id', 1);
 
+    saveInFlight = false;
     if (error) {
       console.error(error);
       els.saveStatus.textContent = 'Save failed';
       toast(`Could not save: ${error.message}`, 'warning');
     } else {
+      lastCloudUpdatedAt = updatedAt;
       els.saveStatus.textContent = 'Live • saved';
     }
   }
@@ -142,7 +150,7 @@
       else setSignedOut();
     });
 
-    const { data, error } = await db.from('app_state').select('state').eq('id', 1).single();
+    const { data, error } = await db.from('app_state').select('state, updated_at').eq('id', 1).single();
     if (error) {
       console.error(error);
       setConnectionStatus('Cloud error', false);
@@ -152,25 +160,82 @@
     }
 
     cloudReady = true;
+    lastCloudUpdatedAt = data.updated_at || null;
     applyRemoteState(data.state, false);
     setConnectionStatus('Live', true);
     els.saveStatus.textContent = adminUnlocked ? 'Live • synced' : 'Live viewer';
     subscribeToSharedState();
+    startCloudPolling();
   }
 
   function subscribeToSharedState() {
-    if (!db || realtimeChannel) return;
+    if (!db || !cloudReady || realtimeChannel) return;
+
     realtimeChannel = db
       .channel('jungle-leaderboard-live')
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'app_state', filter: 'id=eq.1'
       }, payload => {
-        if (payload.new?.state) applyRemoteState(payload.new.state, true);
+        if (!payload.new?.state) return;
+        lastCloudUpdatedAt = payload.new.updated_at || lastCloudUpdatedAt;
+        applyRemoteState(payload.new.state, true);
       })
       .subscribe(status => {
-        if (status === 'SUBSCRIBED') setConnectionStatus('Live', true);
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') setConnectionStatus('Realtime disconnected', false);
+        if (status === 'SUBSCRIBED') {
+          clearTimeout(realtimeReconnectHandle);
+          realtimeReconnectHandle = null;
+          setConnectionStatus('Live', true);
+          return;
+        }
+
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          setConnectionStatus('Reconnecting…', false);
+          scheduleRealtimeReconnect();
+        }
       });
+  }
+
+  function scheduleRealtimeReconnect() {
+    if (!db || !cloudReady || realtimeReconnectHandle) return;
+    realtimeReconnectHandle = setTimeout(async () => {
+      realtimeReconnectHandle = null;
+      if (realtimeChannel) {
+        try { await db.removeChannel(realtimeChannel); } catch {}
+        realtimeChannel = null;
+      }
+      subscribeToSharedState();
+    }, 2500);
+  }
+
+  function startCloudPolling() {
+    if (!db || cloudPollHandle) return;
+    cloudPollHandle = setInterval(() => { void pollSharedState(); }, 2000);
+  }
+
+  async function pollSharedState() {
+    if (!db || !cloudReady || saveInFlight || document.hidden) return;
+
+    const { data, error } = await db
+      .from('app_state')
+      .select('state, updated_at')
+      .eq('id', 1)
+      .single();
+
+    if (error) {
+      console.error('Fallback sync failed:', error);
+      setConnectionStatus('Sync retrying…', false);
+      return;
+    }
+
+    const remoteUpdatedAt = data?.updated_at || null;
+    if (remoteUpdatedAt && remoteUpdatedAt === lastCloudUpdatedAt) return;
+
+    if (data?.state) {
+      lastCloudUpdatedAt = remoteUpdatedAt;
+      applyRemoteState(data.state, true);
+      setConnectionStatus(realtimeChannel ? 'Live' : 'Live • fallback', true);
+      els.saveStatus.textContent = adminUnlocked ? 'Live • synced' : 'Live viewer';
+    }
   }
 
   function applyRemoteState(remoteState, animateChanges = true) {
@@ -203,6 +268,13 @@
     els.connectionStatus.textContent = text;
     els.connectionStatus.classList.toggle('connected', Boolean(connected));
   }
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && cloudReady) {
+      void pollSharedState();
+      if (!realtimeChannel) subscribeToSharedState();
+    }
+  });
 
   function setSignedInUser(user) {
     currentUser = user;
