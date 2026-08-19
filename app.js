@@ -44,12 +44,12 @@
   let adminUnlocked = false;
   let currentUser = null;
   let realtimeChannel = null;
-  let realtimeReconnectHandle = null;
-  let cloudPollHandle = null;
   let cloudReady = false;
   let suppressCloudSave = false;
-  let saveInFlight = false;
-  let lastCloudUpdatedAt = null;
+  let pollHandle = null;
+  let reconnectHandle = null;
+  let saveChain = Promise.resolve();
+  let lastRemoteUpdatedAt = null;
   const cardPositions = new Map();
 
   const els = {
@@ -100,68 +100,42 @@
     localStorage.setItem('jungleLeaderboardState', JSON.stringify(state));
   }
 
-  let pendingSaveSnapshot = null;
-  let saveLoopRunning = false;
-
-  async function saveState() {
+  function saveState() {
     cacheState();
-    if (suppressCloudSave) return;
+    if (suppressCloudSave) return Promise.resolve();
     if (!db || !cloudReady) {
       els.saveStatus.textContent = isConfigured ? 'Connecting…' : 'Local mode — configure Supabase';
-      return;
+      return Promise.resolve();
     }
     if (!adminUnlocked || !currentUser) {
       els.saveStatus.textContent = 'Live viewer';
-      return;
+      return Promise.resolve();
     }
 
-    // Always keep only the newest state. This prevents rapid point clicks from
-    // racing each other and writing an older score after a newer one.
-    pendingSaveSnapshot = clone(state);
-    delete pendingSaveSnapshot.password;
-    els.saveStatus.textContent = 'Saving…';
-    if (saveLoopRunning) return;
-
-    saveLoopRunning = true;
-    saveInFlight = true;
-    try {
-      while (pendingSaveSnapshot) {
-        const payload = pendingSaveSnapshot;
-        pendingSaveSnapshot = null;
-        const updatedAt = new Date().toISOString();
-
-        // .select() is intentional: a normal UPDATE can look successful even
-        // when RLS causes zero rows to be changed. We verify row 1 came back.
-        const { data, error } = await db
-          .from('app_state')
-          .update({ state: payload, updated_by: currentUser.id, updated_at: updatedAt })
-          .eq('id', 1)
-          .select('id, state, updated_at, updated_by')
-          .maybeSingle();
-
-        if (error) {
-          console.error('Supabase save failed:', error);
-          els.saveStatus.textContent = 'Save failed';
-          toast(`Could not save to Supabase: ${error.message}`, 'warning');
-          pendingSaveSnapshot = null;
-          return;
-        }
-
-        if (!data || Number(data.id) !== 1) {
-          console.error('Supabase update changed zero rows. Check the app_state RLS update policy and leaderboard_admins allowlist.');
-          els.saveStatus.textContent = 'Not saved • admin permission';
-          toast('Supabase did not accept the update. Run the supplied policy-fix SQL and verify this email is in leaderboard_admins.', 'warning');
-          pendingSaveSnapshot = null;
-          return;
-        }
-
-        lastCloudUpdatedAt = data.updated_at || updatedAt;
-        els.saveStatus.textContent = 'Live • saved';
+    // Serialize saves so rapid +1/+5 clicks cannot arrive out of order.
+    const payload = clone(state);
+    delete payload.password;
+    saveChain = saveChain.then(async () => {
+      els.saveStatus.textContent = 'Saving…';
+      const { data, error } = await db.rpc('save_leaderboard_state', { p_state: payload });
+      if (error) {
+        console.error('Supabase save failed:', error);
+        els.saveStatus.textContent = 'SAVE FAILED';
+        setConnectionStatus('Save blocked', false);
+        toast(`Could not save to Supabase: ${error.message}`, 'warning');
+        throw error;
       }
-    } finally {
-      saveInFlight = false;
-      saveLoopRunning = false;
-    }
+      if (!data || typeof data !== 'object') {
+        const err = new Error('Supabase did not return the saved leaderboard state.');
+        console.error(err);
+        els.saveStatus.textContent = 'SAVE FAILED';
+        toast(err.message, 'warning');
+        throw err;
+      }
+      els.saveStatus.textContent = 'Live • saved';
+      setConnectionStatus('Live', true);
+    }).catch(() => {});
+    return saveChain;
   }
 
   async function initializeCloud() {
@@ -191,86 +165,65 @@
     }
 
     cloudReady = true;
-    lastCloudUpdatedAt = data.updated_at || null;
+    lastRemoteUpdatedAt = data.updated_at || null;
     applyRemoteState(data.state, false);
     setConnectionStatus('Live', true);
     els.saveStatus.textContent = adminUnlocked ? 'Live • synced' : 'Live viewer';
     subscribeToSharedState();
-    startCloudPolling();
+    startFallbackPolling();
   }
 
   function subscribeToSharedState() {
-    if (!db || !cloudReady || realtimeChannel) return;
-
+    if (!db) return;
+    if (realtimeChannel) {
+      try { db.removeChannel(realtimeChannel); } catch {}
+      realtimeChannel = null;
+    }
     realtimeChannel = db
-      .channel('jungle-leaderboard-live')
+      .channel(`jungle-leaderboard-live-${Date.now()}`)
       .on('postgres_changes', {
         event: 'UPDATE', schema: 'public', table: 'app_state', filter: 'id=eq.1'
       }, payload => {
-        if (!payload.new?.state) return;
-        const incomingUpdatedAt = payload.new.updated_at || null;
-        if (saveInFlight && currentUser && payload.new.updated_by === currentUser.id) {
-          lastCloudUpdatedAt = incomingUpdatedAt || lastCloudUpdatedAt;
-          return;
-        }
-        lastCloudUpdatedAt = incomingUpdatedAt || lastCloudUpdatedAt;
-        applyRemoteState(payload.new.state, true);
+        if (payload.new?.updated_at) lastRemoteUpdatedAt = payload.new.updated_at;
+        if (payload.new?.state) applyRemoteState(payload.new.state, true);
       })
       .subscribe(status => {
         if (status === 'SUBSCRIBED') {
-          clearTimeout(realtimeReconnectHandle);
-          realtimeReconnectHandle = null;
           setConnectionStatus('Live', true);
-          return;
+          if (reconnectHandle) { clearTimeout(reconnectHandle); reconnectHandle = null; }
         }
-
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-          setConnectionStatus('Reconnecting…', false);
-          scheduleRealtimeReconnect();
+          setConnectionStatus('Realtime reconnecting…', false);
+          if (!reconnectHandle) {
+            reconnectHandle = setTimeout(() => {
+              reconnectHandle = null;
+              subscribeToSharedState();
+            }, 2000);
+          }
         }
       });
   }
 
-  function scheduleRealtimeReconnect() {
-    if (!db || !cloudReady || realtimeReconnectHandle) return;
-    realtimeReconnectHandle = setTimeout(async () => {
-      realtimeReconnectHandle = null;
-      if (realtimeChannel) {
-        try { await db.removeChannel(realtimeChannel); } catch {}
-        realtimeChannel = null;
-      }
-      subscribeToSharedState();
-    }, 2500);
+  function startFallbackPolling() {
+    clearInterval(pollHandle);
+    if (!db) return;
+    pollHandle = setInterval(fetchLatestSharedState, 2000);
   }
 
-  function startCloudPolling() {
-    if (!db || cloudPollHandle) return;
-    cloudPollHandle = setInterval(() => { void pollSharedState(); }, 2000);
-  }
-
-  async function pollSharedState() {
-    if (!db || !cloudReady || saveInFlight || document.hidden) return;
-
+  async function fetchLatestSharedState() {
+    if (!db || !cloudReady || suppressCloudSave) return;
     const { data, error } = await db
       .from('app_state')
       .select('state, updated_at')
       .eq('id', 1)
       .single();
-
-    if (error) {
-      console.error('Fallback sync failed:', error);
-      setConnectionStatus('Sync retrying…', false);
+    if (error || !data) {
+      if (error) console.warn('Fallback sync failed:', error.message);
       return;
     }
-
-    const remoteUpdatedAt = data?.updated_at || null;
-    if (remoteUpdatedAt && remoteUpdatedAt === lastCloudUpdatedAt) return;
-
-    if (data?.state) {
-      lastCloudUpdatedAt = remoteUpdatedAt;
+    if (data.updated_at && data.updated_at !== lastRemoteUpdatedAt) {
+      lastRemoteUpdatedAt = data.updated_at;
       applyRemoteState(data.state, true);
-      setConnectionStatus(realtimeChannel ? 'Live' : 'Live • fallback', true);
-      els.saveStatus.textContent = adminUnlocked ? 'Live • synced' : 'Live viewer';
     }
   }
 
@@ -304,13 +257,6 @@
     els.connectionStatus.textContent = text;
     els.connectionStatus.classList.toggle('connected', Boolean(connected));
   }
-
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && cloudReady) {
-      void pollSharedState();
-      if (!realtimeChannel) subscribeToSharedState();
-    }
-  });
 
   function setSignedInUser(user) {
     currentUser = user;
@@ -759,6 +705,10 @@
   function escapeHtml(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
   function escapeAttr(s){return escapeHtml(s);}
   function setTimeTheme(){const h=new Date().getHours();els.app.classList.remove('time-morning','time-afternoon','time-sunset','time-night');els.app.classList.add(h<12?'time-morning':h<17?'time-afternoon':h<20?'time-sunset':'time-night');}
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) void fetchLatestSharedState();
+  });
 
   bindEvents();
   setTimeTheme();
