@@ -223,27 +223,52 @@
   }
 
   function subscribeRealtime() {
-    realtimeChannel = supabase
-      .channel("jyotara-live")
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "leaderboard_state",
-          filter: "id=eq.1"
-        },
-        payload => {
+  console.log("Connecting Realtime to:", cfg.supabaseUrl);
+
+  realtimeChannel = supabase
+    .channel("jyotara-live")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "leaderboard_state"
+      },
+      payload => {
+        console.log("Realtime update received:", payload);
+
+        if (payload.new && payload.new.state) {
           maybeCelebrate(payload.new.state);
           renderLeaderboard();
-          connectionStatus.textContent = "Live";
         }
-      )
-      .subscribe(status => {
-        if (status === "SUBSCRIBED") connectionStatus.textContent = "Live";
-        if (status === "CHANNEL_ERROR") connectionStatus.textContent = "Realtime connection error";
-      });
-  }
+
+        connectionStatus.textContent = "Live";
+      }
+    )
+    .subscribe((status, error) => {
+      console.log("Realtime status:", status);
+      console.log("Realtime error:", error);
+
+      if (status === "SUBSCRIBED") {
+        connectionStatus.textContent = "Live";
+      }
+
+      if (status === "CHANNEL_ERROR") {
+        connectionStatus.textContent =
+          "Realtime connection error — check browser console";
+      }
+
+      if (status === "TIMED_OUT") {
+        connectionStatus.textContent =
+          "Realtime connection timed out";
+      }
+
+      if (status === "CLOSED") {
+        connectionStatus.textContent =
+          "Realtime connection closed";
+      }
+    });
+}
 
   async function refreshAuth() {
     if (!supabase) return;
