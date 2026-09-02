@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark" />
+  <title>Jyotara Leaderboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="background"></div>
+  <div class="overlay"></div>
+
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">LIVE LEADERBOARD</p>
+      <h1>JYOTARA</h1>
+    </div>
+    <button id="adminOpenBtn" class="ghost-btn" type="button">Admin</button>
+  </header>
+
+  <main class="page-shell">
+    <section id="timerWrap" class="timer-wrap hidden" aria-live="polite">
+      <div class="timer-label">TIME REMAINING</div>
+      <div id="timerDisplay" class="timer-display">00:00</div>
+    </section>
+
+    <section id="leaderboard" class="leaderboard" aria-label="Leaderboard"></section>
+
+    <p id="connectionStatus" class="connection-status">Connecting…</p>
+  </main>
+
+  <div id="celebration" class="celebration" aria-hidden="true">
+    <div class="celebration-card">
+      <div class="burst">★</div>
+      <div id="celebrationTitle" class="celebration-title">NEW LEADER!</div>
+      <div id="celebrationTeam" class="celebration-team">Team 1</div>
+    </div>
+    <div id="sparkles" class="sparkles"></div>
+  </div>
+
+  <dialog id="adminDialog" class="admin-dialog">
+    <div class="dialog-head">
+      <div>
+        <p class="eyebrow">CONTROL CENTER</p>
+        <h2>Jyotara Admin</h2>
+      </div>
+      <button id="adminCloseBtn" class="icon-btn" aria-label="Close admin">×</button>
+    </div>
+
+    <section id="loginSection">
+      <p class="muted">Sign in with the Supabase admin account you create during setup.</p>
+      <form id="loginForm" class="login-form">
+        <label>Email<input id="emailInput" type="email" autocomplete="username" required /></label>
+        <label>Password<input id="passwordInput" type="password" autocomplete="current-password" required /></label>
+        <button class="primary-btn" type="submit">Sign In</button>
+      </form>
+      <p id="loginMessage" class="form-message"></p>
+    </section>
+
+    <section id="adminSection" class="hidden">
+      <div class="admin-actions top-actions">
+        <button id="hideAllBtn" class="danger-btn" type="button">Hide All Standings</button>
+        <button id="revealAllBtn" class="secondary-btn" type="button">Reveal All</button>
+        <button id="logoutBtn" class="ghost-btn" type="button">Sign Out</button>
+      </div>
+
+      <p class="admin-hint">When standings are hidden, click a hidden placement card on the main leaderboard to reveal that placement live for everyone.</p>
+
+      <div id="teamControls" class="team-controls"></div>
+
+      <div class="timer-admin">
+        <h3>Timer</h3>
+        <div class="timer-fields">
+          <label>Minutes<input id="timerMinutes" type="number" min="0" max="999" value="10" /></label>
+          <label>Seconds<input id="timerSeconds" type="number" min="0" max="59" value="0" /></label>
+        </div>
+        <div class="admin-actions">
+          <button id="showTimerBtn" class="primary-btn" type="button">Start / Show Timer</button>
+          <button id="hideTimerBtn" class="secondary-btn" type="button">Hide Timer</button>
+        </div>
+        <p class="muted small">At 00:00, the timer simply stays there until an admin hides or restarts it.</p>
+      </div>
+    </section>
+  </dialog>
+
+  <script>
+    // STEP 1: After creating your Supabase project, replace these two values.
+    window.JYOTARA_CONFIG = {
+      supabaseUrl: "YOUR_SUPABASE_PROJECT_URL",
+      supabaseAnonKey: "YOUR_SUPABASE_ANON_KEY"
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js"></script>
+</body>
+</html>
