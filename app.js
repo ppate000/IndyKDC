@@ -1,10 +1,10 @@
 (() => {
   const DEFAULT_STATE = {
     teams: [
-      { id: "team1", name: "Team 1", score: 0 },
-      { id: "team2", name: "Team 2", score: 0 },
-      { id: "team3", name: "Team 3", score: 0 },
-      { id: "team4", name: "Team 4", score: 0 },
+      { id: "team1", name: "The Ancient Seekers", score: 0 },
+      { id: "team2", name: "The Obsidian Voyagers", score: 0 },
+      { id: "team3", name: "The Flame Explorers", score: 0 },
+      { id: "team4", name: "The Cavern Voyagers", score: 0 },
       { id: "team5", name: "Team 5", score: 0 },
       { id: "team6", name: "Team 6", score: 0 }
     ],
