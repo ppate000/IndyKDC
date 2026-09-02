@@ -223,52 +223,51 @@
   }
 
   function subscribeRealtime() {
-  console.log("Connecting Realtime to:", cfg.supabaseUrl);
-
-  realtimeChannel = supabase
-    .channel("jyotara-live")
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "leaderboard_state"
-      },
-      payload => {
-        console.log("Realtime update received:", payload);
-
-        if (payload.new && payload.new.state) {
+    console.log("Connecting Realtime to:", cfg.supabaseUrl);
+  
+    if (realtimeChannel) {
+      supabase.removeChannel(realtimeChannel);
+    }
+  
+    realtimeChannel = supabase
+      .channel("jyotara-live-" + Math.random().toString(36).slice(2))
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "leaderboard_state"
+        },
+        payload => {
+          console.log("REALTIME EVENT RECEIVED:", payload);
+  
+          if (!payload.new || !payload.new.state) {
+            console.warn("Realtime payload did not contain state:", payload);
+            return;
+          }
+  
           maybeCelebrate(payload.new.state);
           renderLeaderboard();
+          updateTimerDisplay();
+  
+          connectionStatus.textContent = "Live";
         }
-
-        connectionStatus.textContent = "Live";
-      }
-    )
-    .subscribe((status, error) => {
-      console.log("Realtime status:", status);
-      console.log("Realtime error:", error);
-
-      if (status === "SUBSCRIBED") {
-        connectionStatus.textContent = "Live";
-      }
-
-      if (status === "CHANNEL_ERROR") {
-        connectionStatus.textContent =
-          "Realtime connection error — check browser console";
-      }
-
-      if (status === "TIMED_OUT") {
-        connectionStatus.textContent =
-          "Realtime connection timed out";
-      }
-
-      if (status === "CLOSED") {
-        connectionStatus.textContent =
-          "Realtime connection closed";
-      }
-    });
-}
+      )
+      .subscribe((status, error) => {
+        console.log("Realtime status:", status);
+        console.log("Realtime error:", error);
+  
+        if (status === "SUBSCRIBED") {
+          connectionStatus.textContent = "Live";
+        } else if (status === "CHANNEL_ERROR") {
+          connectionStatus.textContent =
+            "Live connection interrupted — syncing automatically";
+        } else if (status === "TIMED_OUT") {
+          connectionStatus.textContent =
+            "Live connection timed out — syncing automatically";
+        }
+      });
+  }
 
   async function refreshAuth() {
     if (!supabase) return;
@@ -358,6 +357,32 @@
     await saveState(next);
   });
 
+  async function syncStateFromDatabase() {
+    if (!supabase) return;
+  
+    const { data, error } = await supabase
+      .from("leaderboard_state")
+      .select("state")
+      .eq("id", 1)
+      .single();
+  
+    if (error || !data?.state) {
+      console.error("Backup sync error:", error);
+      return;
+    }
+  
+    const incomingState = normalizeState(data.state);
+  
+    // Only render if something actually changed.
+    if (JSON.stringify(incomingState) !== JSON.stringify(state)) {
+      console.log("Database sync update received:", incomingState);
+  
+      maybeCelebrate(incomingState);
+      renderLeaderboard();
+      updateTimerDisplay();
+    }
+  }
+  
   async function init() {
     renderLeaderboard();
     setInterval(updateTimerDisplay, 250);
@@ -377,6 +402,11 @@
     await loadState();
     subscribeRealtime();
     updateTimerDisplay();
+    
+    // Backup synchronization.
+    // Realtime should update instantly, but this makes sure every device
+    // always catches up even if a websocket event is missed.
+    setInterval(syncStateFromDatabase, 1500);
   }
 
   init();
